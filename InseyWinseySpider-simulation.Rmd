@@ -1,0 +1,112 @@
+---
+title: "Insey Winsey Spider: Monte Carlo simulation and theorectical explanation"
+author: "Jitao david Zhang"
+date: "21 Juli 2018"
+output: html_document
+---
+
+# Background 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+shapeDice <- function() sample(1:6, 1)
+weatherDice <- function() sample(c("sun", "rain"), 1)
+```
+
+# Game logic
+
+```{r logic}
+SHAPE_CODES <- c("START"=0,
+  "half-circle"=1,
+  "diamond"=2,
+  "square"=3,
+  "rect"=4,
+  "circle"=5,
+  "triangle"=6)
+
+YELLOW_SHAPES <- c("START", "half-circle", "diamond", "square", "rect",
+            "circle", "triangle", "half-circle", "diamond", "square", "rect")
+YELLOW_CODES <- SHAPE_CODES [YELLOW_SHAPES]
+
+game <- function(seed=1, codes=YELLOW_CODES, debug=TRUE) {
+  set.seed(seed)
+  step <- 0
+  pos <- 1
+  goal <- length(codes)
+  while(pos != goal) {
+    if(debug) {
+      oldPos <- pos
+    }
+    codesAhead <- codes[(pos+1):goal]
+    newShape <- shapeDice()
+    step <- step+1
+    if(newShape %in% codesAhead) {
+      pos <- pos + match(newShape, codesAhead)
+    }
+    weather <- weatherDice()
+    if(weather == "rain") {
+      pos <- 1
+    }
+    if(debug) {
+      cat(sprintf("old pos: %d; shape:%s; weather:%s; new pos:%d\n", oldPos, names(SHAPE_CODES)[match(newShape, SHAPE_CODES)], weather, pos))
+    }
+  }
+  return(step)
+}
+```
+
+# An example
+
+Here is a simulated run of the game.
+
+```{r}
+game(seed=1, debug=TRUE)
+```
+
+I manually checked three seeds (1, 2, 1887), and the logic seems to be correct.
+
+# Monte Carlo simulation
+We use Monte Carlo simulation to figure out the distribution of steps.
+
+```{r monteCarlo}
+mcN <- 20000
+system.time(mcRes <- sapply(seq(1, mcN), game, debug=FALSE))
+```
+
+By simulation, we found that it takes a median of 26 steps to finish a game. Suppose that each step of a gamer costs 20 seconds (throw the dice, move the spider, tell the weather, and celebrate or 'splash'), it takes a median of 8.5 min for her or him to win. That means, the median game time is probably around 17 minutes. 
+
+Following the calculating, the interquantile of the game time is between 8 min and 33 min.
+
+```{r summ}
+summary(mcRes)
+```
+
+Next, we visualize the results of Monte Carlo simulation with a histogram.
+
+```{r hist}
+hist(mcRes, breaks=200, col="lightblue", ylab="Count", main="Steps of a gamer by Monte Carlo simulation")
+```
+
+# Distribution fitting and theorectical explanations
+
+The last question is, what distribution does this follow? It looks like an expotential distribution. The empirical fit seems very good.
+
+```{r dist, fig.height=5, fig.width=7}
+beta <- mean(mcRes-1) ## 1/lambda
+beta2 <- var(mcRes-1) ## 1/lambda^2
+beta2/beta^2 ## near 1
+lambda <- 1/beta
+{
+  hist(mcRes, breaks=200, col="lightblue", ylab="Probability", main="Monte Carlo simulation and distribution fitting", 
+       prob=TRUE)
+  lines(1:300+1,
+        dexp(1:300, rate=lambda), col="red", lwd=2.5)
+  legend("topright", pch=c(22, NA), col=c("black", "red"), lty=c(NA, 1), 
+         pt.bg=c("lightblue", NA),
+         pt.cex = c(1.5, NA),
+         legend=c("Monte Carlo", "Expotential distribution"))
+}
+```
+
+Now comes the last question: can we explain the observed good fit of the expotential curve?
+
